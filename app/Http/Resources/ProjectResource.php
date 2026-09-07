@@ -50,6 +50,7 @@ class ProjectResource extends JsonResource
             'commune_id'               => $this->commune_id,
             'fokontany_id'             => $this->fokontany_id,
             'zone_description'         => $this->zone_description,
+            'siege'                    => $this->siege,
             'geo_address'              => $this->geo_address,
             // Sommets du polygone de la zone d'intervention, ordonnés — à
             // relier dans cet ordre pour reconstituer le polygone sur la carte.

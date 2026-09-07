@@ -215,6 +215,7 @@ public function mapData(): JsonResponse
             'impact',
             'problematique_climatique',
             'nombre_beneficiaires',
+            'siege'
         ];
 
         $data = $request->all();
@@ -299,6 +300,7 @@ public function mapData(): JsonResponse
             'problematique_climatique'     => 'nullable|string',
             'is_published'                 => 'nullable|boolean',
             'nombre_beneficiaires'         => 'nullable|integer|min:0',
+            'siege'                        => 'nullable|string|max:255',
 
             // Polygone de la zone d'intervention (liste ordonnée de sommets)
             'zone_points'                  => 'nullable|array',

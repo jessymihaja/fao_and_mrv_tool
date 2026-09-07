@@ -42,6 +42,7 @@ class Project extends Model
         'is_published',
         'project_idea_id',
         'nombre_beneficiaires',
+        'siege'
     ];
     // 'wizard_step' est volontairement EXCLU de $fillable : sa progression ne
     // doit être modifiée que via Project::advanceWizardStepTo() (ne peut

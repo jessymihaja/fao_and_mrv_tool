@@ -13,6 +13,7 @@ class FinancementResource extends JsonResource
             'id'                        => $this->id,
             'project_id'                => $this->project_id,
             'type_financement'          => $this->type_financement,
+            'statut'                    => $this->statut,
             'mode_contribution'         => $this->mode_contribution,
             'source_financement'        => $this->source_financement,
             'budget_approuve'           => (float) $this->budget_approuve,

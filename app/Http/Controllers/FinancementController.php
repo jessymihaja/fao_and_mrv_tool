@@ -138,6 +138,7 @@ class FinancementController extends Controller
         return [
             'project_id'         => [...($isUpdate ? ['sometimes'] : ['required']), 'integer', 'exists:projects,id'],
             'type_financement'   => [...$req, 'in:gcf,cofinancement_public,cofinancement_prive'],
+            'statut'             => [...$req, 'in:subvention,pret,credit,don'],
             'mode_contribution'  => [...$req, 'in:numeraire,nature'],
 
             'source_financement' => [...$req, 'string', 'max:255'],

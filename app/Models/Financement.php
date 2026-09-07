@@ -22,6 +22,7 @@ class Financement extends Model
         'date_approbation',
         'description',
         'categorie_contribution_id',
+        'statut', 
     ];
 
     protected function casts(): array
