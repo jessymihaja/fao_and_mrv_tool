@@ -84,6 +84,10 @@ Route::prefix('v1')->group(function () {
 
     Route::get('/documents/{id}/download', [DocumentController::class, 'download'])
         ->middleware('signed')->name('documents.download');
+    
+     Route::get('/rapports-nationaux/{rapportNational}/export/pdf',   [RapportNationalController::class, 'exportPdf']);
+    Route::get('/rapports-nationaux/{rapportNational}/export/excel', [RapportNationalController::class, 'exportExcel']);
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // TOUS LES RÔLES CONNECTÉS — lecture seule
@@ -202,9 +206,7 @@ Route::prefix('v1')->group(function () {
         // ── RAPPORTS NATIONAUX — lecture ──────────────────────────────────────
         Route::get('/rapports-nationaux',                          [RapportNationalController::class, 'index']);
         Route::get('/rapports-nationaux/{rapportNational}',        [RapportNationalController::class, 'show']);
-        Route::get('/rapports-nationaux/{rapportNational}/export/pdf',   [RapportNationalController::class, 'exportPdf']);
-        Route::get('/rapports-nationaux/{rapportNational}/export/excel', [RapportNationalController::class, 'exportExcel']);
-
+       
         // ── MODULE IDÉES DE PROJET — lecture ────────────────────────────────────
         Route::get('/project-ideas/dashboard',        [ProjectIdeaDashboardController::class, 'index']);
         Route::get('/project-ideas/export-data',      [ProjectIdeaController::class, 'exportData']);

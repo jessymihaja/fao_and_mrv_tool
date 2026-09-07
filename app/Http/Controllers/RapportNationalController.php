@@ -72,25 +72,111 @@ class RapportNationalController extends Controller
         return response()->json(null, 204);
     }
 
-    // ── Export PDF (URL signée renvoyée en header) ────────────────
-    public function exportPdf(RapportNational $rapportNational)
+    private function formatDevises($data): string
     {
-        // Implémentation avec barryvdh/laravel-dompdf ou Snappy
-        // Exemple minimal : retourner une vue compilée en PDF
-        // $pdf = \PDF::loadView('rapports.national', ['rapport' => $rapportNational]);
-        // return $pdf->download("{$rapportNational->titre}.pdf");
+        if (is_numeric($data)) {
+            return number_format($data, 2, ',', ' ');
+        }
 
-        // Pour l'instant : JSON avec les données brutes
-        return response()->json($rapportNational->contenu);
+        if (is_array($data)) {
+            if (empty($data)) return '0,00';
+            $parts = [];
+            foreach ($data as $devise => $montant) {
+                $parts[] = number_format($montant, 2, ',', ' ') . ' ' . $devise;
+            }
+            return implode(' | ', $parts);
+        }
+
+        return (string) $data;
     }
 
-    // ── Export Excel ──────────────────────────────────────────────
-    public function exportExcel(RapportNational $rapportNational)
+    // ── EXPORT PDF / PRINT ──────────────────────────────────────
+    public function exportPdf($id)
     {
-        // Implémentation avec maatwebsite/excel
-        // return Excel::download(new RapportNationalExport($rapportNational), 'rapport.xlsx');
+        $rapport = RapportNational::findOrFail($id);
 
-        return response()->json($rapportNational->contenu);
+        if (!$rapport->contenu) {
+            return response()->json(['message' => 'Veuillez générer le rapport avant de l\'exporter'], 400);
+        }
+
+        // Retourne la vue Blade formatée et prête à l'impression
+        return view('pdf.rapport_national_print', compact('rapport'));
+    }
+
+    // ── EXPORT EXCEL / CSV ──────────────────────────────────────
+    public function exportExcel($id)
+    {
+        $rapport = RapportNational::findOrFail($id);
+
+        if (!$rapport->contenu) {
+            return response()->json(['message' => 'Veuillez générer le rapport avant de l\'exporter'], 400);
+        }
+
+        $fileName  = "rapport_national_{$rapport->id}.csv";
+        $contenu   = $rapport->contenu;
+        $resume    = $contenu['resume'] ?? [];
+        $financier = $contenu['financier'] ?? [];
+        $physique  = $contenu['physique'] ?? [];
+        $climatique = $contenu['climatique'] ?? [];
+
+        $headers = [
+            "Content-type"        => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $callback = function () use ($rapport, $resume, $financier, $physique, $climatique) {
+            $file = fopen('php://output', 'w');
+            
+            // BOM UTF-8 pour la compatibilité Excel avec les accents
+            fputs($file, "\xEF\xBB\xBF");
+
+            // 1. RESUME EXECUTIF
+            fputcsv($file, ['=== RESUME EXECUTIF ==='], ';');
+            fputcsv($file, ['Metrique', 'Valeur'], ';');
+            fputcsv($file, ['Titre du rapport', $rapport->titre], ';');
+            fputcsv($file, ['Annee', $rapport->annee ?? 'Toutes'], ';');
+            fputcsv($file, ['Total Projets', $resume['total_projets'] ?? 0], ';');
+            
+            // Formatage explicite du multidevise en chaîne de caractères
+            fputcsv($file, ['Budget Total Approuve', $this->formatDevises($resume['budget_total_approuve'] ?? [])], ';');
+            fputcsv($file, ['Budget Engage', $this->formatDevises($resume['budget_engage'] ?? [])], ';');
+            fputcsv($file, ['Budget Decaisse', $this->formatDevises($resume['budget_decaisse'] ?? [])], ';');
+            fputcsv($file, [], ';');
+
+            // 2. PAR SECTEUR
+            if (!empty($financier['par_secteur'])) {
+                fputcsv($file, ['=== REPARTITION PAR SECTEUR ==='], ';');
+                fputcsv($file, ['Secteur Climatique', 'Montant Approuve'], ';');
+                foreach ($financier['par_secteur'] as $item) {
+                    fputcsv($file, [$item['secteur'] ?? 'N/A', $this->formatDevises($item['totaux'] ?? [])], ';');
+                }
+                fputcsv($file, [], ';');
+            }
+
+            // 3. PAR REGION
+            if (!empty($financier['par_region'])) {
+                fputcsv($file, ['=== REPARTITION PAR REGION ==='], ';');
+                fputcsv($file, ['Region', 'Montant Approuve'], ';');
+                foreach ($financier['par_region'] as $item) {
+                    fputcsv($file, [$item['region'] ?? 'N/A', $this->formatDevises($item['totaux'] ?? [])], ';');
+                }
+                fputcsv($file, [], ';');
+            }
+
+            // 4. INDICATEURS PHYSIQUES & CLIMATIQUES
+            fputcsv($file, ['=== INDICATEURS D IMPACT ==='], ';');
+            fputcsv($file, ['Indicateur', 'Valeur Realisee'], ';');
+            fputcsv($file, ['Total Beneficiaires', $physique['total_beneficiaires'] ?? 0], ';');
+            fputcsv($file, ['Surfaces Restaurees (ha)', $physique['surfaces_restaurees'] ?? 0], ';');
+            fputcsv($file, ['CO2 Evite (tCO2eq)', $climatique['attenuation']['co2_evite'] ?? 0], ';');
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     // ─────────────────────────────────────────────────────────────
