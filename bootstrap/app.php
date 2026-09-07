@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
+        // Exclure l'API de la vérification CSRF pour les tokens Bearer
+        $middleware->validateCsrfTokens(except: [
+            'api/*',
+        ]);
 
         // Custom middleware aliases
         $middleware->alias([
