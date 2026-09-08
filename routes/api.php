@@ -36,6 +36,7 @@ use App\Http\Controllers\StakeholderController;
 use App\Http\Controllers\StakeholderDocumentController;
 use App\Http\Controllers\ProjectPerspectiveController;
 use App\Http\Controllers\ProjectGeographicZoneController;
+use App\Http\Controllers\IndicateurEvolutionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -215,6 +216,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/project-ideas/{id}/financements', [ProjectIdeaFinancementController::class, 'index']);
         Route::get('/project-ideas/{id}/documents',    [ProjectIdeaDocumentController::class, 'index']);
         Route::get('/project-idea-documents/{id}/download', [ProjectIdeaDocumentController::class, 'download']);
+
+        // ── INDICATEURS EVOLUTIONS ──────────────────────────────────────
+        Route::get('/indicateurs-evolutions', [IndicateurEvolutionController::class, 'index']);
     });
 
     // ── MODULE PARTIES PRENANTES — lecture ──────────────────────────────────
@@ -398,6 +402,11 @@ Route::prefix('v1')->group(function () {
 
         Route::post  ('/project-ideas/{id}/documents',      [ProjectIdeaDocumentController::class, 'store']);
         Route::delete('/project-idea-documents/{id}',       [ProjectIdeaDocumentController::class, 'destroy']);
+
+        // ── INDICATEURS EVOLUTIONS ──────────────────────────────────────
+        Route::post('/indicateurs-evolutions', [IndicateurEvolutionController::class, 'store']);
+        Route::put ('/indicateurs-evolutions/{id}', [IndicateurEvolutionController::class, 'update']);
+        Route::delete('/indicateurs-evolutions/{id}', [IndicateurEvolutionController::class, 'destroy']);
     });
 
     // ── MODULE PARTIES PRENANTES — écriture ─────────────────────────────────

@@ -285,7 +285,7 @@ public function mapData(): JsonResponse
             'domaine_intervention_ids.*'   => 'integer|exists:domaine_interventions,id_domaine_intervention',
             'description'                  => 'nullable|string',
             'date_debut'                   => 'nullable|date',
-            'date_fin'                     => 'nullable|date',
+            'date_fin'                     => 'nullable|date|after_or_equal:date_debut',
             'latitude'                     => 'nullable|numeric|between:-90,90',
             'longitude'                    => 'nullable|numeric|between:-180,180',
             'province_id'                  => 'nullable|integer|exists:provinces,id',

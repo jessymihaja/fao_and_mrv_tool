@@ -94,4 +94,9 @@ class Indicateur extends Model
     {
         return $this->hasMany(IndicateurMesure::class)->orderBy('date_mesure');
     }
+    protected $with = ['evolutions'];
+    public function evolutions(): HasMany
+    {
+        return $this->hasMany(IndicateurEvolution::class, 'indicateur_id', 'id')->orderBy('annee', 'asc');
+    }
 }
