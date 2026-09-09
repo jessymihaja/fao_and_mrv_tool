@@ -207,6 +207,7 @@ Route::prefix('v1')->group(function () {
         // ── RAPPORTS NATIONAUX — lecture ──────────────────────────────────────
         Route::get('/rapports-nationaux',                          [RapportNationalController::class, 'index']);
         Route::get('/rapports-nationaux/{rapportNational}',        [RapportNationalController::class, 'show']);
+        Route::post('/rapports-nationaux/export-selection',        [RapportNationalController::class, 'exportSelection']);
        
         // ── MODULE IDÉES DE PROJET — lecture ────────────────────────────────────
         Route::get('/project-ideas/dashboard',        [ProjectIdeaDashboardController::class, 'index']);

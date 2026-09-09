@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\RapportNational;
 use App\Models\Project;
 use App\Models\Indicateur;
+use App\Models\Financement;
 use App\Support\CurrencyAggregator;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -177,6 +178,188 @@ class RapportNationalController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Exporte les projets liés aux financements choisis, indépendamment d'un
+     * RapportNational existant. Les blocs sont sélectionnés par le front.
+     */
+    public function exportSelection(Request $request)
+    {
+        $availableFields = [
+            'projet', 'financement', 'composantes', 'activites', 'indicateurs',
+            'budgets', 'engagements', 'decaissements', 'depenses',
+            'beneficiaires', 'documents',
+        ];
+
+        $validated = $request->validate([
+            'date1'           => ['nullable', 'date'],
+            'date2'           => ['nullable', 'date', 'after_or_equal:date1'],
+            'financement_ids' => ['required', 'array', 'min:1'],
+            'financement_ids.*' => ['integer', 'distinct', 'exists:financements,id'],
+            'fields'          => ['required', 'array', 'min:1'],
+            'fields.*'        => ['string', 'distinct', 'in:' . implode(',', $availableFields)],
+            'format'          => ['nullable', 'in:csv,pdf'],
+        ]);
+
+        $start = $validated['date1'] ?? null;
+        $end   = $validated['date2'] ?? null;
+        $fields = $validated['fields'];
+
+        $financements = Financement::query()
+            ->whereIn('id', $validated['financement_ids'])
+            ->with([
+                'project.region', 'project.province', 'project.district',
+                'project.commune', 'project.classifications',
+                'project.entitesAccreditees', 'project.domainesIntervention',
+                'project.composantes.activites', 'project.composantes.indicateurs',
+                'project.activitesProjet.indicateurs', 'project.indicateursProjet',
+                'project.beneficiaries', 'project.documents',
+                'categorieContribution',
+                'pledges.bailleur', 'approbations.organisme',
+                'engagements', 'decaissements', 'depenses',
+            ])
+            ->get();
+
+        $rows = $financements->map(function (Financement $financement) use ($fields, $start, $end) {
+            $project = $financement->project;
+            $row = [
+                'financement_id' => $financement->id,
+                'project_id'     => $project?->id,
+                'project_code'   => $project?->id_projet,
+                'project_title'  => $project?->titre,
+            ];
+
+            if (in_array('projet', $fields, true)) {
+                $row['projet'] = $this->exportAttributes($project, [
+                    'id', 'id_projet', 'titre', 'description', 'statut',
+                    'classification', 'accredited_entity', 'secteur_climatique',
+                    'date_debut', 'date_fin', 'objectifs', 'impact',
+                    'problematique_climatique', 'nombre_beneficiaires', 'siege',
+                    'is_published', 'province_id', 'region_id', 'district_id',
+                    'commune_id', 'fokontany_id', 'zone_description', 'geo_address',
+                ]);
+                $row['projet']['province'] = $project?->province?->nom;
+                $row['projet']['region'] = $project?->region?->nom;
+                $row['projet']['district'] = $project?->district?->nom;
+                $row['projet']['commune'] = $project?->commune?->nom;
+                $row['projet']['classifications'] = $project?->classifications?->pluck('designation')->values();
+                $row['projet']['entites_accreditees'] = $project?->entitesAccreditees?->pluck('designation')->values();
+                $row['projet']['domaines_intervention'] = $project?->domainesIntervention?->pluck('designation')->values();
+            }
+
+            if (in_array('financement', $fields, true)) {
+                $row['financement'] = $this->exportAttributes($financement, [
+                    'id', 'project_id', 'type_financement', 'mode_contribution',
+                    'source_financement', 'budget_approuve', 'devise',
+                    'date_approbation', 'description', 'categorie_contribution_id',
+                    'statut',
+                ]);
+                $row['financement']['categorie'] = $financement->categorieContribution?->designation;
+            }
+
+            if (in_array('composantes', $fields, true)) {
+                $row['composantes'] = $project?->composantes?->map(fn ($item) => $this->exportAttributes($item))->values() ?? collect();
+            }
+
+            if (in_array('activites', $fields, true)) {
+                $activities = $project?->composantes?->flatMap->activites
+                    ->merge($project?->activitesProjet ?? collect()) ?? collect();
+                $row['activites'] = $activities->map(fn ($item) => $this->exportAttributes($item))->values();
+            }
+
+            if (in_array('indicateurs', $fields, true)) {
+                $indicators = $project?->composantes?->flatMap->indicateurs
+                    ->merge($project?->composantes?->flatMap->activites?->flatMap->indicateurs ?? collect())
+                    ->merge($project?->indicateursProjet ?? collect()) ?? collect();
+                $row['indicateurs'] = $indicators
+                    ->filter(fn ($item) => $this->dateIsInRange($item->date_reference, $start, $end))
+                    ->map(fn ($item) => $this->exportAttributes($item))->values();
+            }
+
+            $budgetBlocks = [
+                'pledges'      => $financement->pledges,
+                'approbations' => $financement->approbations,
+            ];
+            if (in_array('budgets', $fields, true)) {
+                $row['budgets'] = collect($budgetBlocks)->mapWithKeys(fn ($items, $name) => [
+                    $name => $items->filter(fn ($item) => $this->dateIsInRange(
+                        $item->{$name === 'pledges' ? 'date_annonce' : 'date_approbation'}, $start, $end
+                    ))->map(fn ($item) => $this->exportAttributes($item))->values(),
+                ]);
+            }
+
+            foreach (['engagements', 'decaissements', 'depenses'] as $block) {
+                if (in_array($block, $fields, true)) {
+                    $row[$block] = $financement->{$block}
+                        ->filter(fn ($item) => $this->dateIsInRange($item->date, $start, $end))
+                        ->map(fn ($item) => $this->exportAttributes($item))->values();
+                }
+            }
+
+            if (in_array('beneficiaires', $fields, true)) {
+                $row['beneficiaires'] = $project?->beneficiaries?->map(fn ($item) => $this->exportAttributes($item))->values() ?? collect();
+            }
+            if (in_array('documents', $fields, true)) {
+                $row['documents'] = $project?->documents?->map(fn ($item) => $this->exportAttributes($item))->values() ?? collect();
+            }
+
+            return $row;
+        })->values()->all();
+
+        if (($validated['format'] ?? 'csv') === 'pdf') {
+            return view('pdf.selection_export_print', [
+                'rows' => $rows,
+                'fields' => $fields,
+                'date1' => $start,
+                'date2' => $end,
+            ]);
+        }
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename=export_projets.csv',
+            'Cache-Control' => 'no-cache, no-store, must-revalidate',
+        ];
+
+        return response()->stream(function () use ($rows, $fields) {
+            $file = fopen('php://output', 'w');
+            fputs($file, "\xEF\xBB\xBF");
+            fputcsv($file, array_merge(['financement_id', 'project_id', 'project_code', 'project_title'], $fields), ';');
+            foreach ($rows as $row) {
+                $values = [$row['financement_id'], $row['project_id'], $row['project_code'], $row['project_title']];
+                foreach ($fields as $field) {
+                    $values[] = json_encode($row[$field] ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+                fputcsv($file, $values, ';');
+            }
+            fclose($file);
+        }, 200, $headers);
+    }
+
+    private function exportAttributes($model, ?array $only = null): array
+    {
+        if (!$model) {
+            return [];
+        }
+
+        $attributes = $model->getAttributes();
+        if ($only !== null) {
+            $attributes = array_intersect_key($attributes, array_flip($only));
+        }
+
+        return $attributes;
+    }
+
+    private function dateIsInRange($value, ?string $start, ?string $end): bool
+    {
+        if (!$value) {
+            return true;
+        }
+
+        $date = \Illuminate\Support\Carbon::parse($value)->startOfDay();
+        return (!$start || $date->greaterThanOrEqualTo(\Illuminate\Support\Carbon::parse($start)->startOfDay())
+            ) && (!$end || $date->lessThanOrEqualTo(\Illuminate\Support\Carbon::parse($end)->endOfDay()));
     }
 
     // ─────────────────────────────────────────────────────────────
